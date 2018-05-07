@@ -33,9 +33,17 @@ impl Block {
     }
 
     pub fn calc_hash(&self) -> String {
-        let input = format!("{}{}{}", self.prev_hash, self.data, self.timestamp.to_string());
+        let input = format!("{}{}{}{}", self.prev_hash, self.data, self.timestamp.to_string(), self.nonce);
         let mut sha = Sha256::new();
         sha.input_str(input.as_str());
         sha.result_str();
+    }
+
+    pub fn mine_block(&mut self, difficulty: i32) {
+        target = "0".repeat(difficulty);
+        while (hash[0..difficulty] != target) {
+            self.nonce += 1;
+            self.hash = self.calc_hash();
+        }
     }
 }
