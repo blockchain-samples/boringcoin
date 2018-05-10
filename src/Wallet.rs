@@ -1,23 +1,29 @@
+use std::collections::HashMap;
+use sodiumoxide::crypto::box_;
+
 struct Wallet {
     private_key: String,
     public_key: String,
-    UTXOs: // TODO
+    UTXOs: HashMap<String, TransactionOutput>,
+    blockchain: &Blockchain,
 }
 
 impl Wallet {
-    pub fn new() -> Wallet {
-        (private_key, public_key) = Self::generate_keys();
+    pub fn new(blockchain: &Blockchain) -> Wallet {
+        let (private_key, public_key) = box_::gen_keypair();
         
         Wallet {
             private_key,
             public_key,
+            UTXOs: HashMap::new(),
+            blockchain,
         }
     }
 
     pub fn get_balance(&self) -> f32 {
         let total = 0_f32;
 
-        for UTXO in somehow_get_blockchain().UTXOs {
+        for UTXO in self.blockchain.UTXOs {
             if UTXO.is_mine() {
                 self.UTXOs.insert(UTXO.id, UTXO);
                 total += UTXO.value;

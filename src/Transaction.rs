@@ -1,57 +1,70 @@
+extern crate sodiumoxide;
+
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::{ PublicKey, PrivateKey };
+use sodiumoxide::crypto::box_;
+use sodiumoxide::crypto::hash;
+
 pub struct Transaction {
     id: String,
-    sender: String,
-    receiver: String,
+    sender: PublicKey,
+    receiver: PublicKey,
     value: f32,
-    signature: String,
+    signature: Vec<u8>,
+    nonce: Nonce,
     inputs: Vec<TransactionInput>,
     outputs: Vec<TransactionOutput>,
     timestamp: u32,
 }
 
 impl Transaction {
-    pub fn new(sender: String, receiver: String, value: f32, input: Vec<TransactionInput>) -> Transaction {
+    pub fn new(sender: PublicKey, receiver: PublicKey, value: f32, inputs: Vec<TransactionInput>) -> Transaction {
         let transaction = Transaction {
             id: String::new(),
             sender,
             receiver,
             value,
-            input,
-            output: Vec::new(),
+            signature: Vec::new(),
+            inputs,
+            outputs: Vec::new(),
             timestamp: Self::get_timestamp(),
         };
     }
 
     pub fn calc_hash(&self) -> String { 
         let input = format!("{}{}{}{}", self.sender, self.receiver, self.value, self.timestamp.to_string());
-        let mut sha = Sha256::new();
-        sha.input_str(input.as_str());
-        sha.result_str();
+        hash::hash(input);
     }
+    
 
     fn get_timestamp() -> u32 {
         let now = SystemTime::now();
         let millis = now.duration_since(UNIX_EPOCH).expect("time went backwards").as_secs();
     }
 
-    pub fn generate_signature() -> String {
-        
+    pub fn generate_signature(&self, sender_priv_key: PrivateKey) {
+        self.nonce = box_::gen_nonce();
+        self.signature = box_::seal(get_sig_info(), &self.nonce, &self.receiver, sender_priv_key);
     }
 
-    pub fn verify_signature() -> bool {
-
+    pub fn verify_signature(&self, receiver_priv_key: PrivateKey) -> bool {
+        let unencrypted = box_::open(&self.signature, &self.nonce, &self.sender, receiver_priv_key).unwrap(); // TODO -> REMOVE UNWRAP 
+        get_sig_info() == String::from_utf8(unencrypted)
     }
 
-    pub fn process_transcation(&self) -> bool {
+    fn get_sig_info(&self) -> String {
+         format!("{}{}{}{}", self.sender, self.receiver, self.value, self.timestamp)
+    }
+
+    pub fn process_transcation(&self, blockchain: &Blockchain) -> bool {
         if !self.verify_signature() {
             return false;
         }
 
         for input in self.inputs {
-            input.UTXO = somehow_get_blockchain().UTXOs.get(input.output_id);
+            input.UTXO = blockchain.UTXOs.get(input.output_id);
         }
 
-        if get_inputs_val() < somehow_get_blockchain().minimum_transaction {
+        if get_inputs_val() < blockchain.minimum_transaction {
             return false;
         }
 
@@ -61,7 +74,7 @@ impl Transaction {
         self.outputs.push(TransactionOutput::new(self.sender, left_over, self.id));
     
         for output in self.outputs {
-            somehow_get_blockchain().UTXOs.insert(output.id, output);
+            blockchain.UTXOs.insert(output.id, output);
         }
 
         for input in self.inputs {
@@ -69,7 +82,7 @@ impl Transaction {
                 continue;
             }
 
-            somehow_get_blockchain().UTXOs.remove(input.UTXO.id);
+            blockchain.UTXOs.remove(input.UTXO.id);
         }
     
         true
@@ -127,7 +140,7 @@ impl TransactionOutput {
 
         transaction_output.id = get_string_from_key();
         
-        transaction_output
+        transaction_output 
     }
 
     pub fn is_mine(&self, public_key: String) -> bool {
