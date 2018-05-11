@@ -1,15 +1,21 @@
+use block::Block;
+use transaction::TransactionOutput;
+use std::collections::HashMap;
+
 pub struct Blockchain {
-    blocks: Vec<Block>,
-    difficulty: i32,
-    minimum_transaction: f32,
+    pub blocks: Vec<Block>,
+    pub UTXOs: HashMap<String, TransactionOutput>,
+    pub difficulty: i32,
+    pub minimum_transaction: f32,
 }
 
 impl Blockchain {
     fn new() -> Blockchain {
-        let genesis_block = Block::new("and so it begins", "0");
+        //let genesis_block = Block::new("and so it begins", "0");
 
         Blockchain {
-            blocks: vec![genesis_block],
+            blocks: Vec::new(), // todo -> vec![genesis_block],
+            UTXOs: HashMap::new(),
             difficulty: 5,
             minimum_transaction: 2.5,
         }
@@ -17,22 +23,24 @@ impl Blockchain {
 
     fn new_block(&self, data: String) -> Block {
         let last_block = self.blocks.last().unwrap();
-        Block::new(data, last_block.hash);
+        Block::new(last_block.hash)
     }
 
     pub fn add_block(&self, block: Block) {
-        block.mine();
-        blocks.push(block);
+        block.mine(self.difficulty);
+        self.blocks.push(block);
     }
 
     fn is_valid(&self) -> bool {
-        hash_target == "0".repeat(self.difficulty);
+        let hash_target = "0".repeat(self.difficulty as usize);
+        let mut temp_UTXOs: HashMap<String, TransactionOutput> = HashMap::new();
+        temp_UTXOs.insert(genesis_transaction.outputs[0].id, genesis_transaction.outputs[0]);
 
         for block_pair in self.blocks.windows(2) {
             let prev_block = block_pair[0];
             let next_block = block_pair[1];
 
-            if next_block.hash != next_block.calculate_hash() {
+            if next_block.hash != next_block.calc_hash() {
                 return false;
             }
 
@@ -54,17 +62,17 @@ impl Blockchain {
                     return false;
                 }
 
-                for input in transaction.inputs() {
-                    temp_output = temp_UTXOs.get(input.output_id).unwrap();
+                for input in transaction.inputs {
+                    temp_output = temp_UTXOs.get(&input.output_id).unwrap();
 
                     if input.UTXO.value != temp_output.value {
                         return false;
                     }
 
-                    temp_UTXOs.remove(input.output_id);
+                    temp_UTXOs.remove(&input.output_id);
                 }
 
-                for output in transaction.output() {
+                for output in transaction.outputs {
                     temp_UTXOs.insert(output.id, output);
                 }
 
