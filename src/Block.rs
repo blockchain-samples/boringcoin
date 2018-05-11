@@ -3,14 +3,18 @@ extern crate sodiumoxide;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sodiumoxide::crypto::hash;
-use transaction::Transaction;
+use sodiumoxide::crypto::box_::SecretKey;
 
+use transaction::Transaction;
+use blockchain::Blockchain;
+
+#[derive(Clone)]
 pub struct Block {
     pub hash: String,
     pub prev_hash: String,
     merkle_root: String,
     pub transactions: Vec<Transaction>,
-    timestamp: u32,
+    timestamp: u64,
     nonce: i32,
 }
 
@@ -38,21 +42,23 @@ impl Block {
 
     pub fn calc_hash(&self) -> String {
         let input = format!("{}{}{}{}", self.prev_hash, self.timestamp.to_string(), self.nonce, self.merkle_root);
-        String::from_utf8(hash::hash(input).0.to_vec()).unwrap()
+        let hashed_input = hash::hash(&input.into_bytes());
+        String::from_utf8(hashed_input.0.to_vec()).unwrap()
     }
 
     pub fn mine(&mut self, difficulty: i32) {
-        self.merkle_root = Self::get_merkle_root(self.transactions);
-        target = "0".repeat(difficulty as usize);
-        while (self.hash[0..difficulty] != target) {
+        self.merkle_root = Self::get_merkle_root(self.transactions.clone());
+        let target = "0".repeat(difficulty as usize);
+        let hash_prefix: String = self.hash.chars().take(difficulty as usize).collect(); 
+        while hash_prefix != target {
             self.nonce += 1;
             self.hash = self.calc_hash();
         }
     }
 
-    pub fn add_transaction(&self, transaction: Transaction) -> bool {
+    pub fn add_transaction(&mut self, mut transaction: Transaction, blockchain: Blockchain, receiver_priv_key: &SecretKey) -> bool {
         if self.prev_hash != String::from("0") {
-            if transaction.process_transaction() != true {
+            if transaction.process_transaction(blockchain, receiver_priv_key) != true {
                 println!("Transaction failed to process. Discarding.");
                 return false;
             }
@@ -70,23 +76,28 @@ impl Block {
             previous_tree_layer.push(transaction.id);
         }
 
-        let mut tree_layer: Vec<String> = previous_tree_layer;
-        
+        let mut tree_layer: Vec<String> = previous_tree_layer.clone();
+       
+        let mut to_return = String::new();
         while count > 1 {
             tree_layer = Vec::new();
 
             let prev_len = previous_tree_layer.len();
             
             for i in 0..prev_len {
-                tree_layer.push(hash::hash(format!("{}{}",previous_tree_layer[i-1],previous_tree_layer[i])));
+                let input = format!("{}{}", previous_tree_layer[i-1].clone(), previous_tree_layer[i].clone());
+                let input_hash = hash::hash(&input.into_bytes());
+                let hashed_string = String::from_utf8(input_hash.0.to_vec()).unwrap();
+                tree_layer.push(hashed_string);
             }
 
             count = tree_layer.len();
+            to_return = tree_layer[0].clone();
             previous_tree_layer = tree_layer;
         }
 
-        if tree_layer.len() == 0 {
-            return tree_layer[0];
+        if count == 0 {
+            return to_return;
         } else {
             return String::from("");
         }

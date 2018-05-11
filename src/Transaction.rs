@@ -1,12 +1,13 @@
 use std::time::UNIX_EPOCH;
+use std::time::{Duration, SystemTime};
 
-use sodiumoxide::crypto::box_::PublicKey;
+use sodiumoxide::crypto::box_::{PublicKey,SecretKey,Nonce};
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::hash;
-use sodiumoxide::crypto::box_::Nonce;
 
 use blockchain::Blockchain;
 
+#[derive(Clone)]
 pub struct Transaction {
     pub id: String,
     pub sender: PublicKey,
@@ -16,7 +17,7 @@ pub struct Transaction {
     pub nonce: Nonce,
     pub inputs: Vec<TransactionInput>,
     pub outputs: Vec<TransactionOutput>,
-    pub timestamp: u32,
+    pub timestamp: u64,
 }
 
 impl Transaction {
@@ -35,37 +36,43 @@ impl Transaction {
     }
 
     pub fn calc_hash(&self) -> String { 
-        let input = format!("{}{}{}{}", self.sender, self.receiver, self.value, self.timestamp.to_string());
-        String::from_utf8(hash::hash(input).0.to_vec()).unwrap()
+        let sender_string = String::from_utf8(self.sender.0.to_vec()).unwrap();
+        let receiver_string = String::from_utf8(self.receiver.0.to_vec()).unwrap();
+        let input = format!("{}{}{}{}", sender_string, receiver_string, self.value, self.timestamp);
+        let hashed_input = hash::hash(&input.into_bytes());
+        String::from_utf8(hashed_input.0.to_vec()).unwrap()
     }
 
-    fn get_timestamp() -> u32 {
+    fn get_timestamp() -> u64 {
         let now = SystemTime::now();
         let millis = now.duration_since(UNIX_EPOCH).expect("time went backwards").as_secs();
         millis
     }
 
-    pub fn generate_signature(&mut self, sender_priv_key: &PrivateKey) {
+    pub fn generate_signature(&mut self, sender_priv_key: &SecretKey) {
         self.nonce = box_::gen_nonce();
-        self.signature = box_::seal(self.get_sig_info(), &self.nonce, &self.receiver, sender_priv_key);
+        self.signature = box_::seal(&self.get_sig_info().into_bytes(), &self.nonce, &self.receiver, sender_priv_key);
     }
 
-    pub fn verify_signature(&self, receiver_priv_key: &PrivateKey) -> bool {
-        let unencrypted = box_::open(&self.signature, &self.nonce, &self.sender, receiver_priv_key).unwrap(); // TODO -> REMOVE UNWRAP 
+    pub fn verify_signature(&self, receiver_priv_key: &SecretKey) -> bool {
+        let unencrypted = box_::open(&self.signature, &self.nonce, &self.sender, receiver_priv_key).unwrap(); 
         self.get_sig_info() == String::from_utf8(unencrypted).unwrap()
     }
 
     fn get_sig_info(&self) -> String {
-         format!("{}{}{}{}", self.sender, self.receiver, self.value, self.timestamp)
+        let sender_string = String::from_utf8(self.sender.0.to_vec()).unwrap();
+        let receiver_string = String::from_utf8(self.receiver.0.to_vec()).unwrap();
+        format!("{}{}{}{}", sender_string, receiver_string, self.value, self.timestamp)
     }
 
-    pub fn process_transaction(&mut self, blockchain: Blockchain) -> bool {
-        if !self.verify_signature() {
+    pub fn process_transaction(&mut self, mut blockchain: Blockchain, receiver_priv_key: &SecretKey) -> bool {
+        if !self.verify_signature(receiver_priv_key) {
             return false;
         }
 
-        for input in self.inputs {
-            input.UTXO = blockchain.UTXOs.get(&input.output_id).unwrap();
+        for input in self.inputs.iter_mut() {
+            let cloned = blockchain.UTXOs.get(&input.output_id).unwrap().clone(); 
+            input.UTXO = cloned;
         }
 
         if self.get_inputs_val() < blockchain.minimum_transaction {
@@ -74,14 +81,15 @@ impl Transaction {
 
         let left_over = self.get_inputs_val() - self.value;
         let id = self.calc_hash();
-        self.outputs.push(TransactionOutput::new(self.receiver, self.value, self.id));
-        self.outputs.push(TransactionOutput::new(self.sender, left_over, self.id));
+        self.outputs.push(TransactionOutput::new(self.receiver.clone(), self.value.clone(), self.id.clone()));
+        self.outputs.push(TransactionOutput::new(self.sender.clone(), left_over, self.id.clone()));
     
-        for output in self.outputs {
-            blockchain.UTXOs.insert(output.id, output);
+        for output in self.outputs.iter() {
+            let clone = output.clone();
+            blockchain.UTXOs.insert(clone.id.clone(), clone);
         }
 
-        for input in self.inputs {
+        for input in self.inputs.iter() {
             blockchain.UTXOs.remove(&input.UTXO.id);
         }
     
@@ -89,9 +97,9 @@ impl Transaction {
     }
 
     pub fn get_inputs_val(&self) -> f32 {
-        let total = 0_f32;
+        let mut total = 0_f32;
         
-        for input in self.inputs {
+        for input in self.inputs.iter() {
             total += input.UTXO.value;
         }
 
@@ -99,9 +107,9 @@ impl Transaction {
     }
 
     pub fn get_outputs_val(&self) -> f32 {
-        let total = 0_f32;
+        let mut total = 0_f32;
 
-        for output in self.outputs {
+        for output in self.outputs.iter() {
             total += output.value;
         }
 
@@ -109,6 +117,7 @@ impl Transaction {
     }
 }
 
+#[derive(Clone)]
 pub struct TransactionInput {
     pub output_id: String,
     pub UTXO: TransactionOutput,
@@ -123,6 +132,7 @@ impl TransactionInput {
     }
 }
 
+#[derive(Clone)]
 pub struct TransactionOutput {
     pub id: String,
     pub receiver: PublicKey,
@@ -132,15 +142,15 @@ pub struct TransactionOutput {
 
 impl TransactionOutput {
     pub fn new(receiver: PublicKey, value: f32, transaction_id: String) -> TransactionOutput {
-        let transaction_output = TransactionOutput {
+        let mut transaction_output = TransactionOutput {
             id: String::new(),
             receiver,
             value,
             transaction_id,
         };
 
-        let key_as_str = String::from_utf8(receiver.0.to_vec()).unwrap();
-        transaction_output.id = String::from_utf8(hash::hash(key_as_str).0.to_vec()).unwrap();
+        let hashed_receiver = hash::hash(&receiver.0.to_vec());
+        transaction_output.id = String::from_utf8(hashed_receiver.0.to_vec()).unwrap();
         
         transaction_output 
     }
@@ -158,8 +168,6 @@ impl TransactionOutput {
         public_key == &self.receiver
     }
 }
-
-
 
 
 

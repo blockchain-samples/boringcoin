@@ -1,6 +1,6 @@
 extern crate sodiumoxide;
 
-mod blockchain;
-mod block;
-mod wallet;
-mod transaction;
+pub mod blockchain;
+pub mod block;
+pub mod wallet;
+pub mod transaction;

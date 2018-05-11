@@ -1,7 +1,11 @@
-use block::Block;
-use transaction::TransactionOutput;
 use std::collections::HashMap;
 
+use sodiumoxide::crypto::box_::SecretKey;
+
+use block::Block;
+use transaction::{Transaction,TransactionOutput};
+
+#[derive(Clone)]
 pub struct Blockchain {
     pub blocks: Vec<Block>,
     pub UTXOs: HashMap<String, TransactionOutput>,
@@ -10,7 +14,7 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
-    fn new() -> Blockchain {
+    pub fn new() -> Blockchain {
         //let genesis_block = Block::new("and so it begins", "0");
 
         Blockchain {
@@ -21,24 +25,30 @@ impl Blockchain {
         }
     }
 
-    fn new_block(&self, data: String) -> Block {
+    pub fn new_block(&self, data: String) -> Block {
         let last_block = self.blocks.last().unwrap();
-        Block::new(last_block.hash)
+        Block::new(last_block.hash.clone())
     }
 
-    pub fn add_block(&self, block: Block) {
+    pub fn add_block(&mut self, mut block: Block) {
         block.mine(self.difficulty);
         self.blocks.push(block);
     }
 
-    fn is_valid(&self) -> bool {
+    pub fn is_valid(&self, genesis_transaction: &Transaction) -> bool {
         let hash_target = "0".repeat(self.difficulty as usize);
         let mut temp_UTXOs: HashMap<String, TransactionOutput> = HashMap::new();
-        temp_UTXOs.insert(genesis_transaction.outputs[0].id, genesis_transaction.outputs[0]);
+        temp_UTXOs.insert(genesis_transaction.outputs[0].id.clone(), genesis_transaction.outputs[0].clone());
+
+        // TODO -> THIS IS FAKE
+        // TODO -> THIS IS FAKE
+        let receiver_priv_key: SecretKey = SecretKey([0_u8;32]);
+        // TODO -> THIS IS FAKE
+        // TODO -> THIS IS FAKE
 
         for block_pair in self.blocks.windows(2) {
-            let prev_block = block_pair[0];
-            let next_block = block_pair[1];
+            let prev_block = &block_pair[0];
+            let next_block = &block_pair[1];
 
             if next_block.hash != next_block.calc_hash() {
                 return false;
@@ -48,13 +58,14 @@ impl Blockchain {
                 return false;
             }
 
-            if next_block.hash[0..difficulty] == hash_target {
+            let next_block_hash:String = next_block.hash.chars().take(self.difficulty as usize).collect();
+            if next_block_hash != hash_target {
                 return false;
             }
         
             let mut temp_output: TransactionOutput;
-            for transaction in next_block.transactions {
-                if !transaction.verify_signature() {
+            for transaction in next_block.transactions.iter() {
+                if !transaction.verify_signature(&receiver_priv_key) {
                     return false;
                 }
 
@@ -62,8 +73,10 @@ impl Blockchain {
                     return false;
                 }
 
-                for input in transaction.inputs {
-                    temp_output = temp_UTXOs.get(&input.output_id).unwrap();
+                for input in transaction.inputs.iter() {
+                    // TODO -> FIX THIS NASTY SHIT
+                    let cloned = temp_UTXOs.get(&input.output_id).unwrap().clone();
+                    temp_output = cloned;
 
                     if input.UTXO.value != temp_output.value {
                         return false;
@@ -72,8 +85,8 @@ impl Blockchain {
                     temp_UTXOs.remove(&input.output_id);
                 }
 
-                for output in transaction.outputs {
-                    temp_UTXOs.insert(output.id, output);
+                for output in transaction.outputs.iter() {
+                    temp_UTXOs.insert(output.id.clone(), output.clone());
                 }
 
                 if transaction.outputs[0].receiver != transaction.receiver {
