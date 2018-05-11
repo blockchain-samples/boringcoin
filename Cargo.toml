@@ -4,5 +4,13 @@ version = "0.1.0"
 authors = ["Matthew Russo <mcr431@nyu.edu>"]
 
 [dependencies]
-rust-crypto = "^0.2"
 sodiumoxide = "0.0.16"
+
+[lib]
+name = "boringcoin_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "boringcoin"
+path = "src/main.rs"
+
