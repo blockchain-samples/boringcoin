@@ -5,6 +5,7 @@ authors = ["Matthew Russo <mcr431@nyu.edu>"]
 
 [dependencies]
 sodiumoxide = "0.0.16"
+byteorder = "1.2.2"
 
 [lib]
 name = "boringcoin_core"

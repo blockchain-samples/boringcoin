@@ -1,9 +1,13 @@
+extern crate byteorder;
+
 use std::time::UNIX_EPOCH;
 use std::time::{Duration, SystemTime};
 
 use sodiumoxide::crypto::box_::{PublicKey,SecretKey,Nonce};
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::hash;
+
+use byteorder::{ByteOrder, LittleEndian};
 
 use blockchain::Blockchain;
 
@@ -38,8 +42,25 @@ impl Transaction {
     pub fn calc_hash(&self) -> String { 
         let sender_string = String::from_utf8(self.sender.0.to_vec()).unwrap();
         let receiver_string = String::from_utf8(self.receiver.0.to_vec()).unwrap();
-        let input = format!("{}{}{}{}", sender_string, receiver_string, self.value, self.timestamp);
-        let hashed_input = hash::hash(&input.into_bytes());
+        
+        let mut sender_vec = sender.0.to_vec();
+        let mut receiver_vec = receiver.0.to_vec();
+
+        let mut buf = [0;4];
+        LittleEndian::write_f32(&mut buf, self.value.clone());
+        let value_vec = buf.to_vec();
+
+        let mut buf2 = [0;4];
+        LittleEndian::write_f32(&mut buf, self.timestamp.clone());
+        let timestamp_vec = buf2.to_vec();
+
+        let mut input_vec = Vec::new();
+        input_vec.append(&mut sender_vec);
+        input_vec.append(&mut receiver_vec);
+        input_vec.append(&mut value_vec);
+        input_vec.append(&mut timestamp_vec);
+
+        let hashed_input = hash::hash(&input_vec);
         String::from_utf8(hashed_input.0.to_vec()).unwrap()
     }
 
