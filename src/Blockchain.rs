@@ -36,7 +36,7 @@ impl Blockchain {
         self.blocks.push(block);
     }
 
-    pub fn is_valid(&self, genesis_transaction: &Transaction) -> bool {
+    pub fn is_valid(&self, genesis_transaction: &Transaction) -> Result<(),String> {
         let hash_target: Vec<u8> = iter::repeat(0_8).take(self.difficulty as usize).collect();
         let mut temp_UTXOs: HashMap<Vec<u8>, TransactionOutput> = HashMap::new();
         temp_UTXOs.insert(genesis_transaction.outputs[0].id.clone(), genesis_transaction.outputs[0].clone());
@@ -52,26 +52,27 @@ impl Blockchain {
             let next_block = &block_pair[1];
 
             if next_block.hash != next_block.calc_hash() {
-                return false;
+                return Err(String::from("next_block's hash doesn't match itself"));
             }
 
             if prev_block.hash != next_block.prev_hash {
-                return false;
+                println!("{:?} != {:?}", prev_block.hash, next_block.prev_hash);
+                return Err(String::from("next_block.prev_hash doesn't match prev_block.hash"));
             }
 
             let next_block_hash: Vec<u8> = next_block.hash.clone().into_iter().take(self.difficulty as usize).collect::<Vec<u8>>();
             if next_block_hash != hash_target {
-                return false;
+                return Err(String::from("next_block_hash != hash_target"));
             }
         
             let mut temp_output: TransactionOutput;
             for transaction in next_block.transactions.iter() {
                 if !transaction.verify_signature(&receiver_priv_key) {
-                    return false;
+                    return Err(String::from("transaction cant be verified"));
                 }
 
                 if transaction.get_inputs_val() != transaction.get_outputs_val() {
-                    return false;
+                    return Err(String::from("transaction inputs dont match outputs"));
                 }
 
                 for input in transaction.inputs.iter() {
@@ -80,7 +81,7 @@ impl Blockchain {
                     temp_output = cloned;
 
                     if input.UTXO.value != temp_output.value {
-                        return false;
+                        return Err(String::from("input alue doesn't equal output value"));
                     }
 
                     temp_UTXOs.remove(&input.output_id);
@@ -91,16 +92,16 @@ impl Blockchain {
                 }
 
                 if transaction.outputs[0].receiver != transaction.receiver {
-                    return false;
+                    return Err(String::from("Receivers don't match"));
                 }
 
                 if transaction.outputs[1].receiver != transaction.sender {
-                    return false;
+                    return Err(String::from("receiver doesn't match sender"));
                 }
             }
         }
 
-        true 
+        Ok(()) 
     }
 }
 

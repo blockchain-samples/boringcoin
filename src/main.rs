@@ -66,12 +66,10 @@ fn main() {
     println!("\nWalletA's balance is: {}", wallet_a.get_balance(&boringchain));
     println!("WalletB's balance is: {}", wallet_b.get_balance(&boringchain));
 
-    if boringchain.is_valid(&genesis_transaction_clone) {
-        println!("CHAIN BE VALID");
-    } else {
-        println!("WHO BROKE DA CHAIN");
+    match boringchain.is_valid(&genesis_transaction_clone) {
+        Ok(a) => println!("Chain is valid"),
+        Err(e) => println!("Error validating chain: {}", e),
     }
-    
 }   
 
 
