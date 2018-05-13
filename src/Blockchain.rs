@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::iter;
 
 use sodiumoxide::crypto::box_::SecretKey;
 
@@ -8,20 +9,20 @@ use transaction::{Transaction,TransactionOutput};
 #[derive(Clone)]
 pub struct Blockchain {
     pub blocks: Vec<Block>,
-    pub UTXOs: HashMap<String, TransactionOutput>,
+    pub UTXOs: HashMap<Vec<u8>, TransactionOutput>,
     pub difficulty: i32,
     pub minimum_transaction: f32,
 }
 
 impl Blockchain {
-    pub fn new() -> Blockchain {
+    pub fn new(difficulty: i32, minimum: f32) -> Blockchain {
         //let genesis_block = Block::new("and so it begins", "0");
 
         Blockchain {
             blocks: Vec::new(), // todo -> vec![genesis_block],
             UTXOs: HashMap::new(),
-            difficulty: 5,
-            minimum_transaction: 2.5,
+            difficulty,
+            minimum_transaction: minimum,
         }
     }
 
@@ -31,13 +32,13 @@ impl Blockchain {
     }
 
     pub fn add_block(&mut self, mut block: Block) {
-        block.mine(self.difficulty);
+        block.mine(self.difficulty as usize);
         self.blocks.push(block);
     }
 
     pub fn is_valid(&self, genesis_transaction: &Transaction) -> bool {
-        let hash_target = "0".repeat(self.difficulty as usize);
-        let mut temp_UTXOs: HashMap<String, TransactionOutput> = HashMap::new();
+        let hash_target: Vec<u8> = iter::repeat(0_8).take(self.difficulty as usize).collect();
+        let mut temp_UTXOs: HashMap<Vec<u8>, TransactionOutput> = HashMap::new();
         temp_UTXOs.insert(genesis_transaction.outputs[0].id.clone(), genesis_transaction.outputs[0].clone());
 
         // TODO -> THIS IS FAKE
@@ -58,7 +59,7 @@ impl Blockchain {
                 return false;
             }
 
-            let next_block_hash:String = next_block.hash.chars().take(self.difficulty as usize).collect();
+            let next_block_hash: Vec<u8> = next_block.hash.clone().into_iter().take(self.difficulty as usize).collect::<Vec<u8>>();
             if next_block_hash != hash_target {
                 return false;
             }

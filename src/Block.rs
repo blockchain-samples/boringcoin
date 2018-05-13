@@ -1,6 +1,5 @@
-extern crate sodiumoxide;
-
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::iter;
 
 use sodiumoxide::crypto::hash;
 use sodiumoxide::crypto::box_::SecretKey;
@@ -8,10 +7,12 @@ use sodiumoxide::crypto::box_::SecretKey;
 use transaction::Transaction;
 use blockchain::Blockchain;
 
+use byteorder::{ByteOrder, LittleEndian}; 
+
 #[derive(Clone)]
 pub struct Block {
-    pub hash: String,
-    pub prev_hash: String,
+    pub hash: Vec<u8>,
+    pub prev_hash: Vec<u8>,
     merkle_root: String,
     pub transactions: Vec<Transaction>,
     timestamp: u64,
@@ -19,9 +20,9 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(prev_hash: String) -> Block {
+    pub fn new(prev_hash: Vec<u8>) -> Block {
         let mut block = Block {
-            hash: String::new(),
+            hash: Vec::new(),
             prev_hash,
             merkle_root: String::new(),
             transactions: Vec::new(),
@@ -40,24 +41,40 @@ impl Block {
         millis
     }
 
-    pub fn calc_hash(&self) -> String {
-        let input = format!("{}{}{}{}", self.prev_hash, self.timestamp.to_string(), self.nonce, self.merkle_root);
-        let hashed_input = hash::hash(&input.into_bytes());
-        String::from_utf8(hashed_input.0.to_vec()).unwrap()
+    pub fn calc_hash(&self) -> Vec<u8> {
+        let mut buf = [0;8];
+        LittleEndian::write_u64(&mut buf, self.timestamp.clone());
+        let mut timestamp_vec = buf.to_vec().clone();
+
+        let mut buf2 = [0;4];
+        LittleEndian::write_i32(&mut buf2, self.nonce.clone());
+        let mut nonce_vec = buf2.to_vec();
+
+        let mut input_vec: Vec<u8> = Vec::new();
+        input_vec.append(&mut timestamp_vec);
+        input_vec.append(&mut nonce_vec);
+        input_vec.append(&mut self.prev_hash.clone());
+        input_vec.append(&mut self.merkle_root.as_bytes().to_vec().clone());
+        
+        let hashed_input = hash::hash(&input_vec);
+        hashed_input.0.to_vec()
     }
 
-    pub fn mine(&mut self, difficulty: i32) {
+    pub fn mine(&mut self, difficulty: usize) {
         self.merkle_root = Self::get_merkle_root(self.transactions.clone());
-        let target = "0".repeat(difficulty as usize);
-        let hash_prefix: String = self.hash.chars().take(difficulty as usize).collect(); 
+        let target: Vec<u8> = iter::repeat(0_u8).take(difficulty).collect(); 
+        let mut hash_prefix: Vec<u8> = self.hash.clone().into_iter().take(difficulty).collect::<Vec<u8>>();
+        println!("Starting to mine: {:?} {:?}", hash_prefix, target);
         while hash_prefix != target {
+            println!("comparing {:?} to {:?}", hash_prefix, target);
             self.nonce += 1;
             self.hash = self.calc_hash();
+            hash_prefix = self.hash.clone().into_iter().take(difficulty).collect::<Vec<u8>>();
         }
     }
 
     pub fn add_transaction(&mut self, mut transaction: Transaction, blockchain: Blockchain, receiver_priv_key: &SecretKey) -> bool {
-        if self.prev_hash != String::from("0") {
+        if self.prev_hash != vec![0_u8] {
             if transaction.process_transaction(blockchain, receiver_priv_key) != true {
                 println!("Transaction failed to process. Discarding.");
                 return false;

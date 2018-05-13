@@ -1,5 +1,3 @@
-extern crate byteorder;
-
 use std::time::UNIX_EPOCH;
 use std::time::{Duration, SystemTime};
 
@@ -39,20 +37,17 @@ impl Transaction {
         }
     }
 
-    pub fn calc_hash(&self) -> String { 
-        let sender_string = String::from_utf8(self.sender.0.to_vec()).unwrap();
-        let receiver_string = String::from_utf8(self.receiver.0.to_vec()).unwrap();
-        
-        let mut sender_vec = sender.0.to_vec();
-        let mut receiver_vec = receiver.0.to_vec();
+    pub fn calc_hash(&self) -> Vec<u8> { 
+        let mut sender_vec = self.sender.0.to_vec().clone();
+        let mut receiver_vec = self.receiver.0.to_vec().clone();
 
         let mut buf = [0;4];
         LittleEndian::write_f32(&mut buf, self.value.clone());
-        let value_vec = buf.to_vec();
+        let mut value_vec = buf.to_vec().clone();
 
-        let mut buf2 = [0;4];
-        LittleEndian::write_f32(&mut buf, self.timestamp.clone());
-        let timestamp_vec = buf2.to_vec();
+        let mut buf2 = [0;8];
+        LittleEndian::write_u64(&mut buf2, self.timestamp.clone());
+        let mut timestamp_vec = buf2.to_vec();
 
         let mut input_vec = Vec::new();
         input_vec.append(&mut sender_vec);
@@ -61,7 +56,7 @@ impl Transaction {
         input_vec.append(&mut timestamp_vec);
 
         let hashed_input = hash::hash(&input_vec);
-        String::from_utf8(hashed_input.0.to_vec()).unwrap()
+        hashed_input.0.to_vec()
     }
 
     fn get_timestamp() -> u64 {
@@ -72,18 +67,28 @@ impl Transaction {
 
     pub fn generate_signature(&mut self, sender_priv_key: &SecretKey) {
         self.nonce = box_::gen_nonce();
-        self.signature = box_::seal(&self.get_sig_info().into_bytes(), &self.nonce, &self.receiver, sender_priv_key);
+        self.signature = box_::seal(&self.get_sig_info(), &self.nonce, &self.receiver, sender_priv_key);
     }
 
     pub fn verify_signature(&self, receiver_priv_key: &SecretKey) -> bool {
-        let unencrypted = box_::open(&self.signature, &self.nonce, &self.sender, receiver_priv_key).unwrap(); 
-        self.get_sig_info() == String::from_utf8(unencrypted).unwrap()
+        let result = box_::open(&self.signature, &self.nonce, &self.sender, receiver_priv_key); 
+        return match result {
+            Ok(unencrypted) => unencrypted == self.get_sig_info(),
+            Err(e) => {
+                println!("Error verifying signature");
+                return false;
+            }
+        };
     }
 
-    fn get_sig_info(&self) -> String {
-        let sender_string = String::from_utf8(self.sender.0.to_vec()).unwrap();
-        let receiver_string = String::from_utf8(self.receiver.0.to_vec()).unwrap();
-        format!("{}{}{}{}", sender_string, receiver_string, self.value, self.timestamp)
+    fn get_sig_info(&self) -> Vec<u8> {
+        let mut sender_vec = self.sender.0.clone().to_vec();
+        let mut receiver_vec = self.receiver.0.clone().to_vec();
+
+        let mut input_vec: Vec<u8> = Vec::new();
+        input_vec.append(&mut sender_vec);
+        input_vec.append(&mut receiver_vec);
+        input_vec 
     }
 
     pub fn process_transaction(&mut self, mut blockchain: Blockchain, receiver_priv_key: &SecretKey) -> bool {
@@ -140,12 +145,12 @@ impl Transaction {
 
 #[derive(Clone)]
 pub struct TransactionInput {
-    pub output_id: String,
+    pub output_id: Vec<u8>,
     pub UTXO: TransactionOutput,
 }
 
 impl TransactionInput {
-    pub fn new(output_id: String) -> TransactionInput {
+    pub fn new(output_id: Vec<u8>) -> TransactionInput {
         TransactionInput {
             output_id,
             UTXO: TransactionOutput::dud(),
@@ -153,9 +158,9 @@ impl TransactionInput {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct TransactionOutput {
-    pub id: String,
+    pub id: Vec<u8>,
     pub receiver: PublicKey,
     pub value: f32,
     pub transaction_id: String,
@@ -164,21 +169,21 @@ pub struct TransactionOutput {
 impl TransactionOutput {
     pub fn new(receiver: PublicKey, value: f32, transaction_id: String) -> TransactionOutput {
         let mut transaction_output = TransactionOutput {
-            id: String::new(),
+            id: Vec::new(),
             receiver,
             value,
             transaction_id,
         };
 
         let hashed_receiver = hash::hash(&receiver.0.to_vec());
-        transaction_output.id = String::from_utf8(hashed_receiver.0.to_vec()).unwrap();
+        transaction_output.id = hashed_receiver.0.to_vec();
         
         transaction_output 
     }
 
     pub fn dud() -> TransactionOutput {
         TransactionOutput {
-            id: String::new(),
+            id: Vec::new(),
             receiver: PublicKey([0_u8;32]),
             value: 0_f32,
             transaction_id: String::new(),
@@ -186,6 +191,7 @@ impl TransactionOutput {
     }
 
     pub fn is_mine(&self, public_key: &PublicKey) -> bool {
+        println!("Is mine: {}", public_key == &self.receiver);
         public_key == &self.receiver
     }
 }
