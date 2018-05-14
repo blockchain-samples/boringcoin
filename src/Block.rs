@@ -71,6 +71,7 @@ impl Block {
             self.hash = self.calc_hash();
             hash_prefix = self.hash.clone().into_iter().take(difficulty).collect::<Vec<u8>>();
         }
+        println!("FINAL HASH: {:?}", self.hash); 
     }
 
     pub fn add_transaction(&mut self, mut transaction: Transaction, blockchain: Blockchain, receiver_priv_key: &SecretKey) -> bool {

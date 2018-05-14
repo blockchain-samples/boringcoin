@@ -25,20 +25,18 @@ fn main() {
    
     println!("gened gen block");
     // TODO -> this is messy
-    let mut prev_hash = genesis_block.hash.clone();
     let genesis_transaction_clone = genesis_transaction.clone();
     println!("making transaction");
     genesis_block.add_transaction(genesis_transaction, boringchain.clone(), &wallet_a.private_key);
 
     println!("added transaction");
-    boringchain.add_block(genesis_block);
+    let mut prev_hash = boringchain.add_block(genesis_block);
     println!("added block");
     let mut block1 = Block::new(prev_hash);
     println!("\nWalletA's balance is: {}", wallet_a.get_balance(&boringchain));
     println!("\nWalletA is Attempting to send funds (40) to WalletB...");
     block1.add_transaction(wallet_a.send_funds(wallet_b.public_key, 40_f32, &boringchain).unwrap(),boringchain.clone(), &wallet_b.private_key);
-    prev_hash = block1.hash.clone();
-    boringchain.add_block(block1);
+    prev_hash = boringchain.add_block(block1);
     println!("\nWalletA's balance is: {}", wallet_a.get_balance(&boringchain));
     println!("WalletB's balance is: {}", wallet_b.get_balance(&boringchain));
 
@@ -50,8 +48,8 @@ fn main() {
         Ok(transaction) => { block2.add_transaction(transaction, boringchain.clone(), &wallet_b.private_key); () },
         Err(e) => println!("Err while sending funds: {}", e),
     }
-    prev_hash = block2.hash.clone();
-    boringchain.add_block(block2);
+    let block2_hash = block2.hash.clone(); 
+    prev_hash = boringchain.add_block(block2);
     println!("\nWalletA's balance is: {}", wallet_a.get_balance(&boringchain));
     println!("WalletB's balance is: {}", wallet_b.get_balance(&boringchain));
 

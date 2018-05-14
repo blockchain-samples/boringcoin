@@ -31,13 +31,15 @@ impl Blockchain {
         Block::new(last_block.hash.clone())
     }
 
-    pub fn add_block(&mut self, mut block: Block) {
+    pub fn add_block(&mut self, mut block: Block) -> Vec<u8> {
         block.mine(self.difficulty as usize);
+        let hash = block.hash.clone();
         self.blocks.push(block);
+        hash
     }
 
     pub fn is_valid(&self, genesis_transaction: &Transaction) -> Result<(),String> {
-        let hash_target: Vec<u8> = iter::repeat(0_8).take(self.difficulty as usize).collect();
+        let hash_target: Vec<u8> = iter::repeat(0_u8).take(self.difficulty as usize).collect();
         let mut temp_UTXOs: HashMap<Vec<u8>, TransactionOutput> = HashMap::new();
         temp_UTXOs.insert(genesis_transaction.outputs[0].id.clone(), genesis_transaction.outputs[0].clone());
 
@@ -46,8 +48,9 @@ impl Blockchain {
         let receiver_priv_key: SecretKey = SecretKey([0_u8;32]);
         // TODO -> THIS IS FAKE
         // TODO -> THIS IS FAKE
-
+        let mut i = -1;
         for block_pair in self.blocks.windows(2) {
+            i+=1;
             let prev_block = &block_pair[0];
             let next_block = &block_pair[1];
 
@@ -60,8 +63,11 @@ impl Blockchain {
                 return Err(String::from("next_block.prev_hash doesn't match prev_block.hash"));
             }
 
+            println!("SMELLS LIKE BACON IN THE MORNIN: {:?}", next_block.hash);
             let next_block_hash: Vec<u8> = next_block.hash.clone().into_iter().take(self.difficulty as usize).collect::<Vec<u8>>();
-            if next_block_hash != hash_target {
+            if &next_block.hash[0..self.difficulty as usize] != &hash_target[..] {
+                println!("{} {}", i, i + 1);
+                println!("{:?} != {:?}", &next_block.hash[0..self.difficulty as usize], &hash_target[..]);
                 return Err(String::from("next_block_hash != hash_target"));
             }
         
